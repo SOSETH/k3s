@@ -1,0 +1,119 @@
+---
+- name: Check cgroupsv2
+  become: True
+  ansible.builtin.stat:
+    path: /sys/fs/cgroup/cgroup.controllers
+  register: cgroupfs
+
+- name: Enable cgroupv2 in grub
+  become: True
+  when: not cgroupfs.stat.exists
+  ansible.builtin.lineinfile:
+    dest: /etc/default/grub
+    state: present
+    backrefs: yes
+    regexp: '^GRUB_CMDLINE_LINUX=\"(?P<pre>.*)systemd.unified_cgroup_hierarchy=[0-1]+ (?P<post>.+)\"$'
+    line: 'GRUB_CMDLINE_LINUX="\g<pre>systemd.unified_cgroup_hierarchy=1 \g<post>"'
+  notify: update grub
+
+- name: Create cgroupv2 delegation configuration folder
+  become: True
+  ansible.builtin.file:
+    path: /etc/systemd/system/user@.service.d
+    owner: root
+    group: root
+    mode: 0755
+    state: directory
+
+- name: Configure cgroupv2 delegation
+  become: True
+  ansible.builtin.template:
+    src: cgroup-delegation.conf.j2
+    dest: /etc/systemd/system/user@.service.d/ansible.conf
+    owner: root
+    group: root
+    mode: 0644
+
+- meta: flush_handlers
+
+- name: Ensure we can only progress if cgroupsv2 are available right now
+  when: not cgroupfs.stat.exists
+  ansible.builtin.fail:
+    msg: cgroupsv2 are not enabled. We've changed the configuration, but you will need to reboot the machine!
+
+- name: Apply sysctl settings
+  become: True
+  ansible.builtin.template:
+    src: sysctl.conf.j2
+    dest: /etc/sysctl.d/80-k3s.conf
+    owner: root
+    group: root
+    mode: 0644
+  notify: reload sysctl
+
+- name: Set variables (rootless)
+  when: not k3s_cluster
+  ansible.builtin.set_fact:
+    k3s_service: k3s-rootless
+    k3s_config_path: /var/lib/rancher/k3s.yaml
+
+- name: Set variables (normal)
+  when: k3s_cluster
+  ansible.builtin.set_fact:
+    k3s_service: k3s
+    k3s_config_path: /etc/rancher/k3s.yaml
+
+- name: Install k3s
+  become: True
+  ansible.builtin.apt:
+    state: present
+    update_cache: yes
+    cache_valid_time: 1800
+    name:
+      - k3s
+      - charon-systemd
+
+- name: Configure K3S (CLI)
+  become: True
+  ansible.builtin.template:
+    src: k3s.j2
+    dest: /etc/default/k3s
+    owner: k3s
+    group: root
+    mode: 0640
+  notify: restart k3s
+
+- name: Configure K3S (service)
+  become: True
+  ansible.builtin.template:
+    src: k3s.yaml.j2
+    dest: "{{ k3s_config_path }}"
+    owner: k3s
+    group: root
+    mode: 0640
+  notify: restart k3s
+
+- name: Create Strongswan config dir
+  become: True
+  ansible.builtin.file:
+    path: /etc/systemd/system/strongswan-starter.service.d
+    owner: root
+    group: root
+    mode: 0755
+    state: directory
+
+- name: Configure Strongswan socket permissions
+  become: True
+  ansible.builtin.template:
+    src: strongswan-dropin.conf.j2
+    dest: /etc/systemd/system/strongswan-starter.service.d/ansible.conf
+    owner: root
+    group: root
+    mode: 0644
+  notify: reload systemd
+
+- name: Configure Strongswan socket permissions (temporary)
+  become: True
+  ansible.builtin.file:
+    path: /var/run/charon.vici
+    group: k3s

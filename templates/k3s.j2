@@ -1,0 +1,7 @@
+# This file is managed by Ansible (role: k3s), do not edit!
+{% if k3s_cluster %}
+# TODO
+K3S_ARG="server --config={{ k3s_config_path }}"
+{% else %}
+K3S_ARG="server --rootless --snapshotter=fuse-overlayfs --config={{ k3s_config_path }}"
+{% endif %}

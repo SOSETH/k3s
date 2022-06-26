@@ -1,0 +1,20 @@
+---
+- name: update grub
+  become: True
+  ansible.builtin.command: update-grub
+
+- name: reload sysctl
+  become: True
+  ansible.builtin.command: sysctl --system
+
+- name: restart k3s
+  become: True
+  ansible.builtin.systemd:
+    name: "{{ k3s_service }}"
+    state: restarted
+    enabled: yes
+
+- name: reload systemd
+  become: True
+  ansible.builtin.systemd:
+    daemon_reload: yes
