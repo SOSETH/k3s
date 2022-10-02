@@ -117,3 +117,27 @@
   ansible.builtin.file:
     path: /var/run/charon.vici
     group: k3s
+
+- name: Ensure kubeconfig default location directory exists
+  become: True
+  ansible.builtin.file:
+    path: /etc/rancher/k3s
+    owner: root
+    group: root
+    mode: 0755
+    state: directory
+
+- meta: flush_handlers
+
+- name: Wait until kubeconfig is available
+  become: True
+  ansible.builtin.wait_for:
+    path: /var/lib/rancher/.kube/k3s.yaml
+
+- name: Symlink kubeconfig to default location
+  when: not k3s_cluster
+  become: True
+  ansible.builtin.file:
+    src: /var/lib/rancher/.kube/k3s.yaml
+    dest: /etc/rancher/k3s/k3s.yaml
+    state: link

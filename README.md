@@ -1,6 +1,6 @@
 # Role: k3s
 
-Configure k3s on a single node
+Configure k3s on a single node in rootless mode.
 
 ## Configuration
 | Variable             | Default vaule   | Description                                                           |
@@ -12,10 +12,11 @@ Configure k3s on a single node
 | `k3s_cluster_dns`    | `10.43.0.10`    | Address of the DNS service inside K8S (must be in `k3s_service_cidr`) |
 
 
-This node unfortunately is quite invasive:
+This role unfortunately is quite invasive:
  * It will enable cgroups v2. This requires a reboot, if a reboot is required it'll fail the playbook
  * It will enable cgroup delegation for more than just the default controllers
  * It sets up strongswan in preparation for clustering
+ * It enables IPv4 forwarding
 
 **Compatibility tested with:**
   * Debian 11
