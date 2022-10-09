@@ -1,4 +1,14 @@
 ---
+- name: Check cluster secret if required
+  ansible.builtin.fail:
+    msg: "You need to set k3s_cluster_secret!"
+  when: k3s_cluster and not k3s_cluster_secret
+
+- name: Check init node if required
+  ansible.builtin.fail:
+    msg: "You need to set k3s_cluster_init_node!"
+  when: k3s_cluster and not k3s_cluster_init_node
+
 - name: Check cgroupsv2
   become: True
   ansible.builtin.stat:
@@ -52,16 +62,38 @@
   notify: reload sysctl
 
 - name: Set variables (rootless)
-  when: not k3s_cluster
+  when: (not k3s_cluster) and (not k3s_root)
   ansible.builtin.set_fact:
     k3s_service: k3s-rootless
     k3s_config_path: /var/lib/rancher/k3s.yaml
+    k3s_flags: "server --rootless --snapshotter=fuse-overlayfs --config=/var/lib/rancher/k3s.yaml"
 
 - name: Set variables (normal)
-  when: k3s_cluster
+  when: k3s_cluster or k3s_root
   ansible.builtin.set_fact:
     k3s_service: k3s
     k3s_config_path: /etc/rancher/k3s.yaml
+    k3s_flags: "server --config=/etc/rancher/k3s.yaml"
+
+- name: Set variables (cluster)
+  ansible.builtin.set_fact:
+    k3s_flags: "{{ k3s_flags }} --token-file=/etc/rancher/k3s.secret"
+  when: k3s_cluster
+
+- name: Set variables (init node for cluster)
+  ansible.builtin.set_fact:
+    k3s_flags: "{{ k3s_flags }} --cluster-init"
+  when: k3s_cluster and (ansible_fqdn == k3s_cluster_init_node)
+
+- name: Set variables (init node for cluster)
+  ansible.builtin.set_fact:
+    k3s_flags: "{{ k3s_flags }} --server=https://{{ k3s_cluster_init_node }}:6443"
+  when: k3s_cluster and (ansible_fqdn != k3s_cluster_init_node)
+
+- name: Set extra flags
+  ansible.builtin.set_fact:
+    k3s_flags: "{{ k3s_flags }} {{ k3s_feature_toggles }}"
+  when: k3s_feature_toggles|default("") != ""
 
 - name: Install k3s
   become: True
@@ -87,6 +119,18 @@
   become: True
   ansible.builtin.template:
     src: k3s.yaml.j2
+    dest: "/etc/rancher/k3s.secret"
+    owner: k3s
+    group: k3s
+    mode: 0640
+  notify: restart k3s
+
+- name: Configure K3S secrets
+  become: True
+  no_log: True
+  when: k3s_cluster
+  ansible.builtin.copy:
+    content: "{{ k3s_cluster_secret }}"
     dest: "{{ k3s_config_path }}"
     owner: k3s
     group: root
@@ -131,11 +175,12 @@
 
 - name: Wait until kubeconfig is available
   become: True
+  when: (not k3s_cluster) and (not k3s_root)
   ansible.builtin.wait_for:
     path: /var/lib/rancher/.kube/k3s.yaml
 
 - name: Symlink kubeconfig to default location
-  when: not k3s_cluster
+  when: (not k3s_cluster) and (not k3s_root)
   become: True
   ansible.builtin.file:
     src: /var/lib/rancher/.kube/k3s.yaml
