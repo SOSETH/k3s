@@ -85,7 +85,7 @@
     k3s_flags: "{{ k3s_flags }} --cluster-init"
   when: k3s_cluster and (ansible_fqdn == k3s_cluster_init_node)
 
-- name: Set variables (init node for cluster)
+- name: Set variables (member node of cluster)
   ansible.builtin.set_fact:
     k3s_flags: "{{ k3s_flags }} --server=https://{{ k3s_cluster_init_node }}:6443"
   when: k3s_cluster and (ansible_fqdn != k3s_cluster_init_node)
@@ -103,6 +103,14 @@
     cache_valid_time: 1800
     name:
       - k3s
+
+- name: Remove old ipsec packages
+  become: True
+  ansible.builtin.apt:
+    state: absent
+    update_cache: yes
+    cache_valid_time: 1800
+    name:
       - charon-systemd
 
 - name: Configure K3S (CLI)
@@ -119,7 +127,7 @@
   become: True
   ansible.builtin.template:
     src: k3s.yaml.j2
-    dest: "/etc/rancher/k3s.secret"
+    dest: "{{ k3s_config_path }}"
     owner: k3s
     group: k3s
     mode: 0640
@@ -131,36 +139,17 @@
   when: k3s_cluster
   ansible.builtin.copy:
     content: "{{ k3s_cluster_secret }}"
-    dest: "{{ k3s_config_path }}"
+    dest: "/etc/rancher/k3s.secret"
     owner: k3s
     group: root
     mode: 0640
   notify: restart k3s
 
-- name: Create Strongswan config dir
+- name: Remove strongswan
   become: True
   ansible.builtin.file:
     path: /etc/systemd/system/strongswan-starter.service.d
-    owner: root
-    group: root
-    mode: 0755
-    state: directory
-
-- name: Configure Strongswan socket permissions
-  become: True
-  ansible.builtin.template:
-    src: strongswan-dropin.conf.j2
-    dest: /etc/systemd/system/strongswan-starter.service.d/ansible.conf
-    owner: root
-    group: root
-    mode: 0644
-  notify: reload systemd
-
-- name: Configure Strongswan socket permissions (temporary)
-  become: True
-  ansible.builtin.file:
-    path: /var/run/charon.vici
-    group: k3s
+    state: absent
 
 - name: Ensure kubeconfig default location directory exists
   become: True
@@ -170,6 +159,16 @@
     group: root
     mode: 0755
     state: directory
+
+- name: Configure Helm Chart overrides
+  become: True
+  loop: "{{ k3s_helm_customization }}"
+  ansible.builtin.copy:
+    dest: "/var/lib/rancher/k3s/server/manifests/{{ item.name }}"
+    owner: root
+    group: root
+    mode: 0755
+    content: "{{ item.content }}"
 
 - meta: flush_handlers
 

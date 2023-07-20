@@ -1,14 +1,13 @@
 ---
-{% if k3s_cluster %}
-# TODO
-{% else %}
-
-{% endif %}
 cluster-cidr: {{ k3s_cluster_cidr }}
 service-cidr: {{ k3s_service_cidr }}
 node-name: {{ ansible_fqdn }}
-selinux: true
-flannel-backend: ipsec
+selinux: false
+flannel-backend: wireguard-native
 cluster-dns: {{ k3s_cluster_dns }}
 cluster-domain: {{ k3s_cluster_domain }}
 default-local-storage-path: /var/lib/rancher/pvcs
+{% if k3s_node_labels != {} %}
+node-label:
+  {{ k3s_node_labels|to_nice_yaml|indent(width=2) }}
+{% endif %}

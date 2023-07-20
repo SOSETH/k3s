@@ -1,6 +1,6 @@
 # Role: k3s
 
-Configure k3s on a single node in rootless mode.
+Configure k3s on a single node in rootless mode or as a cluster in root mode.
 
 ## Configuration
 | Variable                | Default vaule   | Description                                                           |
@@ -19,7 +19,6 @@ Configure k3s on a single node in rootless mode.
 This role unfortunately is quite invasive:
  * It will enable cgroups v2. This requires a reboot, if a reboot is required it'll fail the playbook
  * It will enable cgroup delegation for more than just the default controllers
- * It sets up strongswan in preparation for clustering
  * It enables IPv4 forwarding
 
 **Compatibility tested with:**
