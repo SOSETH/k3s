@@ -14,7 +14,6 @@
   ansible.builtin.systemd:
     name: "{{ k3s_service }}"
     state: restarted
-    enabled: true
 
 - name: Reload systemd
   become: true

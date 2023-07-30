@@ -171,6 +171,12 @@
     mode: "0755"
     content: "{{ item.content }}"
 
+- name: Start and enable K3S
+  ansible.builtin.systemd:
+    name: "{{ k3s_service }}"
+    state: started
+    enabled: true
+
 - name: Flush handlers
   ansible.builtin.meta: flush_handlers
 
