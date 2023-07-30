@@ -15,17 +15,6 @@
     path: /sys/fs/cgroup/cgroup.controllers
   register: cgroupfs
 
-- name: Enable cgroupv2 in grub
-  become: true
-  when: not cgroupfs.stat.exists
-  ansible.builtin.lineinfile:
-    dest: /etc/default/grub
-    state: present
-    backrefs: true
-    regexp: '^GRUB_CMDLINE_LINUX=\"(?P<pre>.*)systemd.unified_cgroup_hierarchy=[0-1]+ (?P<post>.+)\"$'
-    line: 'GRUB_CMDLINE_LINUX="\g<pre>systemd.unified_cgroup_hierarchy=1 \g<post>"'
-  notify: Update grub
-
 - name: Create cgroupv2 delegation configuration folder
   become: true
   ansible.builtin.file:
@@ -35,6 +24,11 @@
     mode: "0755"
     state: directory
 
+- name: Ensure we only progress if cgroupsv2 are available right now
+  when: not cgroupfs.stat.exists
+  ansible.builtin.fail:
+    msg: cgroupsv2 are not enabled. Please enable cgroupsv2 according to the instructions of your distribution!
+
 - name: Configure cgroupv2 delegation
   become: true
   ansible.builtin.template:
@@ -43,14 +37,6 @@
     owner: root
     group: root
     mode: "0644"
-
-- name: Flush handlers
-  ansible.builtin.meta: flush_handlers
-
-- name: Ensure we can only progress if cgroupsv2 are available right now
-  when: not cgroupfs.stat.exists
-  ansible.builtin.fail:
-    msg: cgroupsv2 are not enabled. We've changed the configuration, but you will need to reboot the machine!
 
 - name: Apply sysctl settings
   become: true
