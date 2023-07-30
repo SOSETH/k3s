@@ -10,41 +10,42 @@
   when: k3s_cluster and not k3s_cluster_init_node
 
 - name: Check cgroupsv2
-  become: True
+  become: true
   ansible.builtin.stat:
     path: /sys/fs/cgroup/cgroup.controllers
   register: cgroupfs
 
 - name: Enable cgroupv2 in grub
-  become: True
+  become: true
   when: not cgroupfs.stat.exists
   ansible.builtin.lineinfile:
     dest: /etc/default/grub
     state: present
-    backrefs: yes
+    backrefs: true
     regexp: '^GRUB_CMDLINE_LINUX=\"(?P<pre>.*)systemd.unified_cgroup_hierarchy=[0-1]+ (?P<post>.+)\"$'
     line: 'GRUB_CMDLINE_LINUX="\g<pre>systemd.unified_cgroup_hierarchy=1 \g<post>"'
-  notify: update grub
+  notify: Update grub
 
 - name: Create cgroupv2 delegation configuration folder
-  become: True
+  become: true
   ansible.builtin.file:
     path: /etc/systemd/system/user@.service.d
     owner: root
     group: root
-    mode: 0755
+    mode: "0755"
     state: directory
 
 - name: Configure cgroupv2 delegation
-  become: True
+  become: true
   ansible.builtin.template:
     src: cgroup-delegation.conf.j2
     dest: /etc/systemd/system/user@.service.d/ansible.conf
     owner: root
     group: root
-    mode: 0644
+    mode: "0644"
 
-- meta: flush_handlers
+- name: Flush handlers
+  ansible.builtin.meta: flush_handlers
 
 - name: Ensure we can only progress if cgroupsv2 are available right now
   when: not cgroupfs.stat.exists
@@ -52,14 +53,14 @@
     msg: cgroupsv2 are not enabled. We've changed the configuration, but you will need to reboot the machine!
 
 - name: Apply sysctl settings
-  become: True
+  become: true
   ansible.builtin.template:
     src: sysctl.conf.j2
     dest: /etc/sysctl.d/80-k3s.conf
     owner: root
     group: root
-    mode: 0644
-  notify: reload sysctl
+    mode: "0644"
+  notify: Reload sysctl
 
 - name: Set variables (rootless)
   when: (not k3s_cluster) and (not k3s_root)
@@ -96,91 +97,92 @@
   when: k3s_feature_toggles|default("") != ""
 
 - name: Install k3s
-  become: True
+  become: true
   ansible.builtin.apt:
     state: present
-    update_cache: yes
+    update_cache: true
     cache_valid_time: 1800
     name:
       - k3s
 
 - name: Remove old ipsec packages
-  become: True
+  become: true
   ansible.builtin.apt:
     state: absent
-    update_cache: yes
+    update_cache: true
     cache_valid_time: 1800
     name:
       - charon-systemd
 
 - name: Configure K3S (CLI)
-  become: True
+  become: true
   ansible.builtin.template:
     src: k3s.j2
     dest: /etc/default/k3s
     owner: k3s
     group: root
-    mode: 0640
-  notify: restart k3s
+    mode: "0640"
+  notify: Restart k3s
 
 - name: Configure K3S (service)
-  become: True
+  become: true
   ansible.builtin.template:
     src: k3s.yaml.j2
     dest: "{{ k3s_config_path }}"
     owner: k3s
     group: k3s
-    mode: 0640
-  notify: restart k3s
+    mode: "0640"
+  notify: Restart k3s
 
 - name: Configure K3S secrets
-  become: True
-  no_log: True
+  become: true
+  no_log: true
   when: k3s_cluster
   ansible.builtin.copy:
     content: "{{ k3s_cluster_secret }}"
     dest: "/etc/rancher/k3s.secret"
     owner: k3s
     group: root
-    mode: 0640
-  notify: restart k3s
+    mode: "0640"
+  notify: Restart k3s
 
 - name: Remove strongswan
-  become: True
+  become: true
   ansible.builtin.file:
     path: /etc/systemd/system/strongswan-starter.service.d
     state: absent
 
 - name: Ensure kubeconfig default location directory exists
-  become: True
+  become: true
   ansible.builtin.file:
     path: /etc/rancher/k3s
     owner: root
     group: root
-    mode: 0755
+    mode: "0755"
     state: directory
 
 - name: Configure Helm Chart overrides
-  become: True
+  become: true
   loop: "{{ k3s_helm_customization }}"
   ansible.builtin.copy:
     dest: "/var/lib/rancher/k3s/server/manifests/{{ item.name }}"
     owner: root
     group: root
-    mode: 0755
+    mode: "0755"
     content: "{{ item.content }}"
 
-- meta: flush_handlers
+- name: Flush handlers
+  ansible.builtin.meta: flush_handlers
 
 - name: Wait until kubeconfig is available
-  become: True
+  become: true
   when: (not k3s_cluster) and (not k3s_root)
   ansible.builtin.wait_for:
     path: /var/lib/rancher/.kube/k3s.yaml
 
 - name: Symlink kubeconfig to default location
   when: (not k3s_cluster) and (not k3s_root)
-  become: True
+  become: true
   ansible.builtin.file:
     src: /var/lib/rancher/.kube/k3s.yaml
     dest: /etc/rancher/k3s/k3s.yaml
